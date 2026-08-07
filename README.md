@@ -1,68 +1,80 @@
 # ssl
 
-Odoo-Anpassungen für app-stream.
+Odoo-Anpassungen für app-stream (Odoo Online / SaaS — keine eigenen Module möglich).
 
-## `appstream_invoice_mail`
+## `vorlagen/rechnung-sepa-oder-ueberweisung.html`
 
-E-Mail-Vorlage für den Rechnungsversand (Odoo Enterprise 19), die den
-Zahlungsabsatz automatisch danach unterscheidet, ob der Rechnungsbetrag
+Body für die Rechnungs-E-Mail (`account.move`), der den Zahlungsabsatz automatisch
+danach wechselt, ob per **SEPA-Lastschrift** eingezogen oder vom Kunden
+**überwiesen** wird. Eine Vorlage, drei Fälle — kein Umschalten von Hand beim Versand.
 
-* per **SEPA-Lastschrift** eingezogen wird, oder
-* vom Kunden per **Überweisung** gezahlt werden soll.
+### Einbauen
 
-### Wie die Unterscheidung funktioniert
+1. Entwicklermodus aktivieren (Einstellungen → ganz unten → *Entwicklerwerkzeuge aktivieren*).
+2. Einstellungen → Technisch → E-Mail → **E-Mail-Vorlagen**.
+3. Bestehende Rechnungsvorlage öffnen (oder per *Duplizieren* eine Kopie anlegen und
+   diese im Dialog *Senden & Drucken* auswählen).
+4. Reiter *Inhalt* → im Editor auf **`</>`** (Codeansicht) → gesamten Inhalt durch die
+   Datei ersetzen. Den HTML-Kommentar am Dateianfang nicht mitkopieren.
 
-Die Vorlage liest das Feld `is_sepa_dd_communication` auf `account.move`.
-Dieses wird so berechnet:
+### Die Bedingung
 
-| Feld *Zahlungshinweis in E-Mail* | Ergebnis |
-| --- | --- |
-| `Automatisch` (Standard) | SEPA, wenn für den Kunden ein gültiges Mandat (`sdd.mandate`) existiert |
-| `SEPA-Lastschrift` | immer SEPA-Text |
-| `Überweisung` | immer Überweisungstext |
+Genau eine Zeile entscheidet über den Text — die erste im Body:
 
-Für die automatische Erkennung wird `sdd.mandate._get_usable_mandate(company, partner, datum)`
-aus dem Enterprise-Modul *SEPA Direct Debit* (`account_sepa_direct_debit`) verwendet — also
-exakt dieselbe Logik, die Odoo beim Anlegen einer Lastschriftzahlung nutzt. Steht die Methode
-in einer Version nicht zur Verfügung, wird auf eine Suche nach einem aktiven Mandat des
-kaufmännischen Partners zurückgefallen. Ist das Modul gar nicht installiert, gilt jede
-Rechnung als Überweisung.
+```xml
+<t t-set="ist_lastschrift" t-value="'lastschrift' in (object.invoice_payment_term_id.name or '').lower()"/>
+```
 
-Das Modul hängt bewusst nur von `account` ab: alle Zugriffe auf SEPA-spezifische Felder
-passieren abgesichert in Python, nicht im QWeb-Body. Dadurch kann die Vorlage nicht durch
-ein fehlendes Feld beim Versand abbrechen.
+Ausgewertet wird die **Zahlungsbedingung** der Rechnung: enthält ihr Name das Wort
+*Lastschrift* (Groß-/Kleinschreibung egal), erscheint der Einzugstext, sonst der
+Überweisungstext. Voraussetzung ist also je eine Zahlungsbedingung wie
+`Lastschrift 10 Tage` und `14 Tage netto`, hinterlegt am Kunden unter
+*Verkauf & Einkauf → Zahlungsbedingungen*. Von dort landet sie automatisch auf jeder
+neuen Rechnung und lässt sich pro Rechnung übersteuern.
 
-### Textbausteine
+### Warum die Zahlungsbedingung und nicht das SEPA-Mandat
 
-Zusätzlich zum reinen Wechsel des Absatzes:
+Ursprünglich war das aktive Mandat (`sdd.mandate`) als Kriterium geplant. Das trägt
+auf Odoo Online nicht:
 
-* **SEPA:** nennt optional Mandatsreferenz, Gläubiger-Identifikationsnummer und das
-  belastete Kundenkonto.
-* **Überweisung:** nennt Fälligkeitsdatum, Kontoinhaber, IBAN/BIC und den Verwendungszweck.
-  Das Konto kommt aus `partner_bank_id` der Rechnung, ersatzweise aus dem ersten Bankkonto
-  des Unternehmens (`mail_bank_account_id`).
-* **Bereits bezahlt:** ist die Rechnung beim Versand schon ausgeglichen
-  (`payment_state in ('paid', 'in_payment')`), erscheint stattdessen ein Hinweis darauf —
-  so wird kein Einzug angekündigt, der nicht mehr stattfindet.
+* In einem Modul lässt sich der Zugriff auf Enterprise-Felder in Python absichern.
+  In einer reinen QWeb-Vorlage geht das nicht — `object.a or object.b` wertet `object.a`
+  trotzdem aus und bricht bei einem nicht existierenden Feld beim Rendern ab.
+* Die Feldnamen des Enterprise-Moduls `account_sepa_direct_debit` sind nicht öffentlich
+  dokumentiert und zwischen Versionen nicht garantiert stabil. Ein falsch geratener Name
+  führt entweder zum Abbruch beim Versand oder — schlimmer — still zum falschen
+  Zahlungstext beim Kunden.
 
-### Installation
+Die Vorlage nutzt deshalb ausschließlich Felder aus dem Standardmodul `account`
+bzw. `base`. Sie kann durch ein fehlendes Feld nicht brechen.
 
-1. Verzeichnis `appstream_invoice_mail` in den Addons-Pfad legen.
-2. Apps-Liste aktualisieren, Modul *AppStream: Rechnungs-E-Mail (SEPA / Überweisung)* installieren.
+### Alternative Kriterien
 
-### Als Standardvorlage verwenden
+Nur die eine `t-set`-Zeile tauschen, der Rest bleibt:
 
-Die Vorlage heißt **„Rechnung: Versand (SEPA-Lastschrift / Überweisung)"** und ist im
-Dialog *Senden & Drucken* über die Vorlagenauswahl erreichbar. Sie ersetzt die
-Odoo-Standardvorlage `account.email_template_edi_invoice` nicht, damit ein Upgrade des
-`account`-Moduls die Anpassung nicht überschreibt.
+**Kundenkennzeichen (Stichwort/Tag am Kunden), z. B. Tag `SEPA-Lastschrift`:**
 
-Der PDF-Anhang wird wie gewohnt vom Versand-Assistenten erzeugt; die Vorlage definiert
-deshalb bewusst keinen eigenen Report.
+```xml
+<t t-set="ist_lastschrift" t-value="'SEPA-Lastschrift' in object.partner_id.commercial_partner_id.category_id.mapped('name')"/>
+```
 
-### Manuelles Übersteuern
+**Aktives SEPA-Mandat** — nur einsetzen, wenn der Feldname vorher geprüft wurde
+(Einstellungen → Technisch → Datenbankstruktur → *Felder*, Modell `res.partner`,
+nach `sdd` filtern). Vorher an einer Testrechnung versenden:
 
-Auf der Rechnung (Reiter *Weitere Informationen*, neben der Zahlungsbedingung) steht das
-Feld *Zahlungshinweis in E-Mail*. Damit lässt sich für Einzelfälle — Kunde mit Mandat zahlt
-diese eine Rechnung selbst — der Text vor dem Versand umstellen. Daneben zeigt das
-schreibgeschützte Feld *E-Mail-Text: SEPA-Lastschrift*, welche Variante gerade greifen würde.
+```xml
+<t t-set="ist_lastschrift" t-value="object.partner_id.commercial_partner_id.sudo().mapped('sdd_mandate_ids').filtered(lambda m: m.state == 'active')"/>
+```
+
+### Was die Vorlage sonst noch macht
+
+* **Bereits bezahlt:** ist die Rechnung beim Versand ausgeglichen
+  (`payment_state in ('paid', 'in_payment')`), erscheint statt Einzugs- oder
+  Überweisungstext ein Hinweis darauf. So wird kein Einzug angekündigt, der nicht
+  mehr stattfindet.
+* **Überweisungstext:** nennt Fälligkeitsdatum, Kontoinhaber, IBAN/BIC und den
+  Verwendungszweck. Das Konto kommt aus dem Feld *Bankkonto* der Rechnung, ersatzweise
+  aus dem ersten Bankkonto des Unternehmens.
+* Rechnungsnummer, Auftrag, Projektnummer, Telefonnummer, Hilfebereich-Button und
+  Signaturblock sind unverändert aus der bisherigen Vorlage übernommen und in allen
+  Fällen gleich.

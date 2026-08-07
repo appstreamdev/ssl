@@ -1,0 +1,60 @@
+<!--
+  Odoo 19 · E-Mail-Vorlage Rechnungsversand
+  Modell: account.move
+  Unterscheidet SEPA-Lastschrift vs. Überweisung.
+
+  In Odoo einfügen: Einstellungen > Technisch > E-Mail-Vorlagen > Vorlage öffnen
+  > Reiter "Inhalt" > im Editor auf </> (Codeansicht) > alles ersetzen.
+  Diesen Kommentarblock nicht mitkopieren.
+
+  DIE EINZIGE STELLE, DIE ÜBER DEN TEXT ENTSCHEIDET, IST DAS ERSTE t-set.
+-->
+
+<div style="margin: 0px; padding: 0px;">
+
+  <t t-set="ist_lastschrift" t-value="'lastschrift' in (object.invoice_payment_term_id.name or '').lower()"/>
+  <t t-set="bankkonto" t-value="object.partner_bank_id or object.company_id.partner_id.bank_ids[:1]"/>
+
+  <p style="margin: 0px; padding: 0px; font-size: 13px;">
+    Guten Tag
+    <t t-if="object.partner_id.parent_id">
+      <t t-out="object.partner_id.name or ''">Max Mustermann</t> (<t t-out="object.partner_id.parent_id.name or ''">Musterfirma GmbH</t>),
+    </t>
+    <t t-else="">
+      <t t-out="object.partner_id.name or ''">Max Mustermann</t>,
+    </t>
+    <br/>
+    <br/>
+
+    anbei erhalten Sie die Rechnung<t t-if="object.name"> <span style="font-weight: bold;" t-out="object.name or ''">RE/2026/00005</span></t>
+    über <span style="font-weight: bold;" t-out="format_amount(object.amount_total, object.currency_id) or ''">1.234,00&nbsp;€</span>.<br/>
+    <t t-if="object.invoice_origin">Die Rechnung bezieht sich auf den Auftrag: <t t-out="object.invoice_origin or ''">VR250001</t><br/></t>
+    <t t-if="object.ref">Projektnummer: <t t-out="object.ref or ''">KND-HSP-001</t><br/></t>
+    <br/>
+
+    <t t-if="object.payment_state in ('paid', 'in_payment')">
+      Die Rechnung ist bereits ausgeglichen &#8211; Sie müssen nichts weiter veranlassen.<br/>
+    </t>
+    <t t-elif="ist_lastschrift">
+      Der Einzug wird in den nächsten Tagen per SEPA-Lastschrifteinzug stattfinden.<br/>
+    </t>
+    <t t-else="">
+      Bitte überweisen Sie den Rechnungsbetrag<t t-if="object.invoice_date_due"> bis zum <span style="font-weight: bold;" t-out="format_date(object.invoice_date_due) or ''">31.08.2026</span></t> auf das folgende Konto:<br/>
+      <t t-if="bankkonto">
+        <span style="color: #6b7280; font-size: 12px;">
+          Kontoinhaber: <t t-out="bankkonto.acc_holder_name or object.company_id.name or ''">Musterfirma GmbH</t><br/>
+          IBAN: <t t-out="bankkonto.acc_number or ''">DE02120300000000202051</t><t t-if="bankkonto.bank_id.bic"> &#183; BIC: <t t-out="bankkonto.bank_id.bic or ''">BYLADEM1001</t></t><br/>
+        </span>
+      </t>
+      Verwendungszweck: <span style="font-weight: bold;" t-out="object.payment_reference or object.name or ''">RE/2026/00005</span><br/>
+    </t>
+    <br/>
+
+    Für Fragen zur Rechnung stehe ich Ihnen gerne jederzeit per Mail oder telefonisch zur Verfügung: 0170/5250836 <br/>Bei technischen Fragen finden Sie hier Unterstützung: <a href="https://www.app-stream.eu/helpdesk/serviceteam-1/knowledgebase" class="btn btn-fill-secondary" style="color: #111827; border-color: #e7e9ed; text-decoration: none; border-radius: 4px; border-style: solid; padding: 5px 10px; margin: 0px; box-sizing: border-box; border-width: 0.555556px; transition: none; box-shadow: var(--btn-box-shadow); background-color: #e7e9ed; user-select: none; cursor: pointer; vertical-align: middle; text-align: center; line-height: 1.5; font-weight: 500; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Ubuntu, 'Noto Sans', Arial, 'Odoo Unicode Support Noto', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; display: inline-block;"><font style="border-radius:0px;border-style:none;padding:0px;margin:0px;box-sizing:border-box;border-left-color:#374151;border-bottom-color:#374151;border-right-color:#374151;border-top-color:#374151;border-left-width:0px;border-bottom-width:0px;border-right-width:0px;border-top-width:0px;color: #374151;">Hilfebereich</font></a><br/>&nbsp;<br/>
+
+    <t t-if="not is_html_empty(object.invoice_user_id.signature)" data-o-mail-quote-container="1">
+      <br/>
+      <div data-o-mail-quote="1">--<br data-o-mail-quote="1"/><t t-out="object.invoice_user_id.signature or ''" data-o-mail-quote="1">Andreas Preißer</t></div>
+    </t>
+  </p>
+</div>
